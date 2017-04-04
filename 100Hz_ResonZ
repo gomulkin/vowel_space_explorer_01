@@ -19,12 +19,9 @@ c /(4*l) => float F; // 1st resonance freq (Hz)
 
 // Basic Model
 2 => int n; // number of formants (supposed to be any)
-SinOsc form[n]; // formant filter array []
-2 => form[0].sync;
-2 => form[1].sync;
+ResonZ form[n]; // formant filter array []
 float freq[n]; // formant freq array []
-SinOsc glot; // voice source (???)
-99 => glot.gain;
+SawOsc glot; // voice source (???)
 Gain out; // out gain (for volume control)
 Gain out2; // out2 gain control (for mute/unmute)
 1 => out.gain; // full volume 
@@ -36,10 +33,10 @@ Gain volume[n]; // formant gains array []
 5000 => int upper; // upper freq limit for navigation
 
 // Adding vibrato to voice source (???)
-//SinOsc vibrato => glot;
-//5.0 => vibrato.freq;
-//1 => vibrato.gain;
-//2 => glot.sync;
+SinOsc vibrato => glot;
+5.0 => vibrato.freq;
+1 => vibrato.gain;
+2 => glot.sync;
 
 F/5 => float pitch; // to get pitch 100Hz
 // Voice Pitch Correction (male/female)
@@ -51,7 +48,7 @@ else {pitch * Math.sqrt(2)=> glot.freq;} // female or child (~ F/2.8)
 fun void vowelStart() {
     for (int i; i < n; i++)  {
         glot => form[i] => volume[i] => out => out2 => dac;
-        //30 => form[i].Q;
+        30 => form[i].Q;
         1.0/n => m; // just split the gain between the formants
         m => volume[i].gain;
         // getting freqs for a "neutral" vowel:
