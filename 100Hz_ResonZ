@@ -1,0 +1,338 @@
+// Vowel Space Explorer 1.0 *************************
+// (c)2016 Danila Gomulkin
+
+// A keyboard- (numpad-) controled program for vowel timbre mapping
+
+// Settings:
+// Pitch: F0 = 100 Hz 
+// Formants: F1, F2 (n=2) 
+// Filter type: ResonZ
+// Q1 = Q2 = 30, volume[i] = 1/2
+// gain = 0.6
+
+
+// Some Physics 
+350 => float c; // sound speed (m/sec)
+0.175 => float l; // throat length (m)
+c /(4*l) => float F; // 1st resonance freq (Hz)
+// (values were chosen to get F1=500 Hz)
+
+// Basic Model
+2 => int n; // number of formants (supposed to be any)
+SinOsc form[n]; // formant filter array []
+2 => form[0].sync;
+2 => form[1].sync;
+float freq[n]; // formant freq array []
+SinOsc glot; // voice source (???)
+99 => glot.gain;
+Gain out; // out gain (for volume control)
+Gain out2; // out2 gain control (for mute/unmute)
+1 => out.gain; // full volume 
+1 => int gn => out2.gain; // unmute 
+Gain volume[n]; // formant gains array []
+100 => int aug; // freq change step
+1 => float m; // variable for formant gain
+0 => int fn; // formant call number
+5000 => int upper; // upper freq limit for navigation
+
+// Adding vibrato to voice source (???)
+//SinOsc vibrato => glot;
+//5.0 => vibrato.freq;
+//1 => vibrato.gain;
+//2 => glot.sync;
+
+F/5 => float pitch; // to get pitch 100Hz
+// Voice Pitch Correction (male/female)
+if (l >= 0.16) {pitch => glot.freq;} // adult male (notmally ~ F/4)
+else {pitch * Math.sqrt(2)=> glot.freq;} // female or child (~ F/2.8)
+
+// CORE FUNCTION ************************************
+// Starting a Neutral Vowel
+fun void vowelStart() {
+    for (int i; i < n; i++)  {
+        glot => form[i] => volume[i] => out => out2 => dac;
+        //30 => form[i].Q;
+        1.0/n => m; // just split the gain between the formants
+        m => volume[i].gain;
+        // getting freqs for a "neutral" vowel:
+        (2*(i+1)-1)*F => freq[i] => form[i].freq;
+        <<< "i=", i, "freq=", freq[i], "gain=", m >>>;
+    } 
+}
+
+// LOOP function ***********************
+
+fun void circle() {
+    vowelStart();
+        while (true){
+        0.6 => out.gain;
+        1::second => now;
+        0 => out.gain;
+        1::second => now;
+    }
+}
+
+// KEYBOARD-functions: ************************
+
+// F1/F2-plane navigation *********************
+// |7 8 9|
+// |4 + 6|
+// |1 2 3|
+// Press <7> ascii==55 to move sound Up-Left
+// Press <8> ascii==56 to move sound Up
+// Press <9> ascii==57 to move sound Up-Right
+// Press <4> ascii==52 to move sound Left
+// Press <6> ascii==54 to move sound Right
+// Press <1> ascii==49 to move sound Down-Left
+// Press <2> ascii==50 to move sound Down
+// Press <3> ascii==51 to move sound Down-Right
+fun void moveSound(){
+    Hid hid;	// a message to convey data from Hid
+    HidMsg msg;	// device number
+    0=> int device;	// try to open keyboard
+    if( hid.openKeyboard( device ) == false) me.exit(); // try to open keyboard
+    <<<"keyboard-0:", hid.name(), "ready!">>>; // print
+    while (true){   
+        hid => now; 
+        if (hid.recv(msg)){
+            if( msg.isButtonDown()&& msg.ascii==55){
+                if (freq[0] > aug){  
+                    freq[0] - aug => freq[0];
+                    freq[0] => form[0].freq;
+                    freq[1] + aug => freq[1];
+                    freq[1] => form[1].freq;
+                    <<<"F1 =",freq[0],"Hz">>>;
+                    <<<"F2 =",freq[1],"Hz">>>;
+                }
+                else {
+                    freq[fn] => freq[fn];
+                    <<<"F1 and/or F2 =< lower limit", aug, "Hz">>>;
+                }
+            }
+            if( msg.isButtonDown()&& msg.ascii==56){
+                if (freq[0] > aug){  
+                    freq[0] - aug => freq[0];
+                    freq[0] => form[0].freq;
+                    freq[1] => freq[1];
+                    freq[1] => form[1].freq;
+                    <<<"F1 =",freq[0],"Hz">>>;
+                    <<<"F2 =",freq[1],"Hz">>>;
+                }
+                else {
+                    freq[fn] => freq[fn];
+                    <<<"F1 and/or F2 =< lower limit", aug, "Hz">>>;
+                }
+            }
+            if( msg.isButtonDown()&& msg.ascii==57){
+                if (freq[0] > aug && freq[1] > aug){  
+                    freq[0] - aug => freq[0];
+                    freq[0] => form[0].freq;
+                    freq[1] - aug => freq[1];
+                    freq[1] => form[1].freq;
+                    <<<"F1 =",freq[0],"Hz">>>;
+                    <<<"F2 =",freq[1],"Hz">>>;                }
+                else {
+                    freq[fn] => freq[fn];
+                    <<<"F1 and/or F2 =< lower limit", aug, "Hz">>>;
+                }
+            }
+            if( msg.isButtonDown()&& msg.ascii==52){
+                if (freq[0] == freq[0]){  
+                    freq[0] => freq[0];
+                    freq[0] => form[0].freq;
+                    freq[1] + aug => freq[1];
+                    freq[1] => form[1].freq;
+                    <<<"F1 =",freq[0],"Hz">>>;
+                    <<<"F2 =",freq[1],"Hz">>>;                }
+                else {
+                    freq[fn] => freq[fn];
+                    <<<"F1 and/or F2 =< lower limit", aug, "Hz">>>;
+                }
+            }
+            if( msg.isButtonDown()&& msg.ascii==54){
+                if (freq[1] >= (freq[0] + aug)){  
+                    freq[0] => freq[0];
+                    freq[0] => form[0].freq;
+                    freq[1] - aug => freq[1];
+                    freq[1] => form[1].freq;
+                    <<<"F1 =",freq[0],"Hz">>>;
+                    <<<"F2 =",freq[1],"Hz">>>;                }
+                else {
+                    freq[fn] => freq[fn];
+                    <<<"F1 and/or F2 =< lower limit", aug, "Hz">>>;
+                }
+            }
+            if( msg.isButtonDown()&& msg.ascii==49){
+                if (freq[0] == freq[0]){  
+                    freq[0] + aug => freq[0];
+                    freq[0] => form[0].freq;
+                    freq[1] + aug => freq[1];
+                    freq[1] => form[1].freq;
+                    <<<"F1 =",freq[0],"Hz">>>;
+                    <<<"F2 =",freq[1],"Hz">>>;                }
+                else {
+                    freq[fn] => freq[fn];
+                    <<<"F1 and/or F2 =< lower limit", aug, "Hz">>>;
+                }
+            }
+            if( msg.isButtonDown()&& msg.ascii==50){
+                if (freq[1] >= (freq[0] + aug)){  
+                    freq[0] + aug => freq[0];
+                    freq[0] => form[0].freq;
+                    freq[1] => freq[1];
+                    freq[1] => form[1].freq;
+                    <<<"F1 =",freq[0],"Hz">>>;
+                    <<<"F2 =",freq[1],"Hz">>>;                }
+                else {
+                    freq[fn] => freq[fn];
+                    <<<"F1 and/or F2 =< lower limit", aug, "Hz">>>;
+                }
+            }            
+            if( msg.isButtonDown()&& msg.ascii==51){
+                if (freq[1] >= (freq[0] + aug)){  
+                    freq[0] + aug => freq[0];
+                    freq[0] => form[0].freq;
+                    freq[1] - aug => freq[1];
+                    freq[1] => form[1].freq;
+                    <<<"F1 =",freq[0],"Hz">>>;
+                    <<<"F2 =",freq[1],"Hz">>>;                }
+                else {
+                    freq[fn] => freq[fn];
+                    <<<"F1 and/or F2 =< lower limit", aug, "Hz">>>;
+                }
+            }
+            else {      
+            }            
+        0.1::second => now; 
+        }
+    }
+}
+
+// F3-CONTROL (if defined: 3 => n) *****************
+
+// Press <u> to rise F3 Up
+// Press <d> to lower F3 Down
+fun void changeF3(){
+    Hid hid;	// a message to convey data from Hid
+    HidMsg msg;	// device number
+    0=> int device;	// try to open keyboard
+    if( hid.openKeyboard( device ) == false) me.exit(); // try to open keyboard
+    <<<"keyboard-1:", hid.name(), "ready!">>>; // print
+    while (true){   
+        hid => now;
+        if (hid.recv(msg)){
+            if( msg.isButtonDown()&& msg.ascii==85 && n>2){
+                if (freq[2] < upper){  
+                    freq[2] + aug => freq[2];
+                    freq[2] => form[2].freq;
+                    <<<"F3 =",freq[2],"Hz">>>;
+                }
+                else {
+                    freq[2] => freq[2];
+                    <<<"F3 >= upper limit",upper, "Hz">>>;
+                }
+            }
+            if( msg.isButtonDown()&& msg.ascii==68 && n>2){
+                if (freq[2] > aug){
+                    freq[2] - aug => freq[2];
+                    freq[2] => form[2].freq;
+                    <<<"F3 =",freq[2],"Hz">>>;
+                }
+                else {
+                    freq[2] => freq[2];
+                    <<<"F3 =< lower limit", aug, "Hz">>>;
+                }
+            }
+            else {
+            }
+        0.1::second=>now; 
+        }
+    }
+}
+
+// PRINT ALL FREQs *********************************
+
+// Press <p> to Print all F-freqs
+fun void printAll(){
+    Hid hid;	// a message to convey data from Hid
+    HidMsg msg;	// device number
+    0=> int device;	// try to open keyboard
+    if( hid.openKeyboard( device ) == false) me.exit(); // try to open keyboard
+    <<<"keyboard-3:", hid.name(), "ready!">>>; // print
+    while (true){   
+        hid => now;
+        if (hid.recv(msg)){
+            if( msg.isButtonDown()&& msg.ascii==80){
+                for (int i; i < n; i++)  {
+                    <<<"F",i+1,"=",freq[i],"Hz">>>;
+                }
+            }
+            else {
+                fn => fn;
+            }
+        0.1::second => now;
+        }
+    }
+}
+
+// BACK-TO-SQUARE-ONE *************************
+
+// Press <b> to return to Back to starting freqs
+fun void backAll(){
+    Hid hid;	// a message to convey data from Hid
+    HidMsg msg;	// device number
+    0=> int device;	// try to open keyboard
+    if( hid.openKeyboard( device ) == false) me.exit(); // try to open keyboard
+    <<<"keyboard-4:", hid.name(), "ready!">>>; // print
+    while (true){   
+        hid => now;
+        if (hid.recv(msg)){
+            if( msg.isButtonDown()&& msg.ascii==66){
+                for (int i; i < n; i++)  {
+                    (2*(i+1)-1)*F => freq[i] => form[i].freq;
+                    <<<"F",i+1,"=",freq[i],"Hz">>>;
+                }
+            } 
+            else {
+                fn => fn;
+            }
+        0.1::second => now;
+        }
+    }
+}
+
+// MUTE-UNMUTE ************************************
+
+// Press <0> to mute - press <0> again to unmute
+fun void mute(){
+    Hid hid;	// a message to convey data from Hid
+    HidMsg msg;	// device number
+    0=> int device;	// try to open keyboard
+    if( hid.openKeyboard( device ) == false) me.exit(); // try to open keyboard
+    <<<"keyboard-5:", hid.name(), "ready!">>>; // print
+    while (true){   
+        hid => now;
+        if (hid.recv(msg)){
+            if( msg.isButtonDown()&& msg.ascii==48){
+                Std.abs(gn-1) => gn;
+                gn => out2.gain;  
+                <<<"out2.gain: ",gn>>>;            
+            } 
+            else {
+                gn => gn;
+            }
+        0.1::second => now;
+        }
+    }
+}
+
+// START WORKING: *********************************
+
+spork ~ moveSound();
+spork ~ changeF3();
+spork ~ printAll();
+spork ~ backAll();
+spork ~ mute();
+
+
+circle();
